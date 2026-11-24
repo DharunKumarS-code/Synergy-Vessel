@@ -349,6 +349,7 @@ def test_pair_validation_still_blocks_before_any_request(groq_app):
 def test_key_loader_reuses_the_automation_loader_and_writes_nothing(monkeypatch):
     """The real loader imports automation's src.config and calls its load_provider_environment -- here a stand-in
     module, so automation/.env is never read -- without writing bytecode into automation/."""
+    monkeypatch.setattr(sys, "dont_write_bytecode", False)   # known starting value (CI sets PYTHONDONTWRITEBYTECODE=1)
     seen = {}
 
     class FakeConfig:

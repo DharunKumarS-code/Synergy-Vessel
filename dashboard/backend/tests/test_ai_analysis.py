@@ -442,5 +442,18 @@ def test_gemini_adapter_sends_labelled_pair_and_maps_errors(gemini, monkeypatch)
             p.analyse(*_images(), "PROMPT TEXT")
 
 
-def test_importing_adapter_writes_nothing_into_automation():
-    assert sys.dont_write_bytecode is False  # restored after the guarded import
+def test_importing_adapter_writes_nothing_into_automation(monkeypatch, tmp_path):
+    from app.ai import gemini_provider as gp
+
+    monkeypatch.setattr(sys, "dont_write_bytecode", False)   # known starting value (CI sets PYTHONDONTWRITEBYTECODE=1)
+    monkeypatch.setattr(sys, "path", list(sys.path))         # the guarded import adds the automation root
+    flags = {}
+
+    def fake_import(name):                                   # stand-in: automation code is never imported here
+        flags[name] = sys.dont_write_bytecode
+        return object()
+
+    monkeypatch.setattr(gp.importlib, "import_module", fake_import)
+    gp._automation_modules(tmp_path)
+    assert flags == {"src.vision_client": True, "src.config": True}   # no bytecode written during the import
+    assert sys.dont_write_bytecode is False                             # original value restored afterwards

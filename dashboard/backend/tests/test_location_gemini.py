@@ -295,6 +295,7 @@ def test_import_preview_shows_gemini_suggestions_and_commit_never_applies_them(c
 
 
 def test_the_loader_reuses_the_automation_loader_and_writes_no_bytecode(monkeypatch):
+    monkeypatch.setattr(sys, "dont_write_bytecode", False)   # known starting value (CI sets PYTHONDONTWRITEBYTECODE=1)
     seen = {}
 
     class FakeConfig:
