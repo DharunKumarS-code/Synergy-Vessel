@@ -2,16 +2,16 @@
 # The installable, exact and hash-pinned lock is requirements.txt, generated from this file:
 #     .venv\Scripts\pip-compile --generate-hashes --strip-extras requirements.in -o requirements.txt
 # Edit THIS file, then regenerate the lock (see README "Dependencies"). Do not edit requirements.txt by hand.
-fastapi>=0.115,<1
+fastapi>=0.165.0,<1
 uvicorn>=0.30
-pydantic>=2.7,<3
+pydantic>=2.14.4,<3
 openpyxl>=3.1
 # Groq condition provider and location AI (app/ai/groq_provider.py, app/location_intel/*) -- SV-07: was dev-only
 httpx>=0.28.1,<1
 # Phase 5: only needed for the opt-in live Gemini provider (same packages as automation/requirements.in)
-google-genai>=0.3
+google-genai>=3.6.1
 tenacity>=8.2
 Pillow>=10
 # Used through the automation's settings / key loader (automation/src/config.py), reused by the backend
-PyYAML>=6
+PyYAML>=6.0.4
 python-dotenv>=1
