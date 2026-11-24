@@ -411,12 +411,21 @@ def test_an_invalid_ai_answer_is_not_counted_as_an_outage(app_client):
 
 
 # =========================================================================== reverse proxy (static checks)
+def _strip_comments(text: str) -> str:
+    return "\n".join(line.split("#", 1)[0] for line in text.splitlines())
+
+
 def _nginx() -> str:
-    return "\n".join(line.split("#", 1)[0] for line in NGINX.read_text(encoding="utf-8").splitlines())
+    """The configuration as nginx sees it: comments removed and `include file.conf;` (SV-07: security_headers.conf,
+    proxy_api.conf, next to the main file) replaced by that file's content."""
+    def inline(m):
+        return _strip_comments((NGINX.parent / m.group(1)).read_text(encoding="utf-8"))
+    return re.sub(r"^\s*include\s+([\w.-]+\.conf)\s*;", inline, _strip_comments(NGINX.read_text(encoding="utf-8")), flags=re.M)
 
 
 def _location(conf: str, name: str) -> str:
-    m = re.search(r"location\s+" + re.escape(name) + r"\s*\{(.*?)\n\s*\}", conf, re.S)
+    # optional ^~ modifier (SV-07: API and asset prefixes take precedence over the regex block-list)
+    m = re.search(r"location\s+(?:\^~\s+)?" + re.escape(name) + r"\s*\{(.*?)\n\s*\}", conf, re.S)
     assert m, name
     return m.group(1)
 
@@ -468,7 +477,7 @@ def test_m2_proxy_port_is_consistent_and_8080_is_no_longer_used():
 def test_ci_workflow_runs_tests_and_build_without_secrets_ai_or_deployment():
     text = CI.read_text(encoding="utf-8")
     wf = yaml.safe_load(text)
-    assert set(wf["jobs"]) == {"backend", "frontend"}
+    assert set(wf["jobs"]) == {"backend", "frontend", "dependency-audit"}   # SV-07: + vulnerability audit
     assert wf["permissions"] == {"contents": "read"}
     assert wf["env"]["SYNERGY_AI_PROVIDER"] == "disabled" and wf["env"]["SYNERGY_AI_ALLOW_LIVE"] == "0"
     assert "secrets." not in text and "GEMINI_API_KEY" not in text and "GROQ_API_KEY" not in text
@@ -481,3 +490,38 @@ def test_ci_workflow_runs_tests_and_build_without_secrets_ai_or_deployment():
     assert frontend[2:] == ["npm ci", "npm test", "npm run build"]
     for job in ("backend", "frontend"):
         assert (PROJECT / wf["jobs"][job]["defaults"]["run"]["working-directory"]).is_dir()
+
+
+# =========================================================================== SV-07: CI supply-chain hardening
+def test_sv07_ci_actions_pinned_to_commit_shas_without_persisted_credentials():
+    wf = yaml.safe_load(CI.read_text(encoding="utf-8"))
+    steps = [s for job in wf["jobs"].values() for s in job["steps"]]
+    uses = [s["uses"] for s in steps if "uses" in s]
+    assert uses and all(re.fullmatch(r"actions/[\w-]+@[0-9a-f]{40}", u) for u in uses), uses
+    for s in steps:
+        if s.get("uses", "").startswith("actions/checkout@"):
+            assert s["with"]["persist-credentials"] is False
+    assert all("permissions" not in job for job in wf["jobs"].values())      # only the read-only workflow default
+
+
+def test_sv07_ci_installs_python_locks_with_hashes_and_audits_dependencies():
+    wf = yaml.safe_load(CI.read_text(encoding="utf-8"))
+    backend = " ".join(s.get("run", "") for s in wf["jobs"]["backend"]["steps"])
+    assert "--require-hashes -r requirements-dev.txt" in backend and "pip check" in backend
+    audit = " ".join(s.get("run", "") for s in wf["jobs"]["dependency-audit"]["steps"])
+    assert "npm audit --omit=dev --audit-level=high" in audit
+    for lock in ("dashboard/backend/requirements-dev.txt", "automation/requirements-dev.txt"):
+        assert f"pip_audit --require-hashes --disable-pip -r {lock}" in audit
+    assert "upgrade pip" not in backend + audit                           # tool versions are pinned
+
+
+def test_sv07_python_locks_are_exact_and_hashed():
+    for folder in (DASHBOARD / "backend", PROJECT / "automation"):
+        for name in ("requirements.txt", "requirements-dev.txt"):
+            text = (folder / name).read_text(encoding="utf-8")
+            reqs = re.findall(r"^([A-Za-z0-9][\w.-]*)(==|>=|<=|~=|>|<)?([^\s\;]*)", text, re.M)
+            assert reqs and all(op == "==" for _, op, _ in reqs), (folder, name)
+            assert text.count("--hash=sha256:") >= len(reqs)
+        assert (folder / "requirements.in").is_file()
+    assert "pandas" not in (PROJECT / "automation" / "requirements.txt").read_text(encoding="utf-8")
+    assert re.search(r"^httpx==", (DASHBOARD / "backend" / "requirements.txt").read_text(encoding="utf-8"), re.M)

@@ -13,9 +13,10 @@ those folders, the original source workbooks, or anything already in the project
 
 ```
 cd "E:\Synergy Vessel\automation"
-python -m venv .venv
+python -m venv .venv                   # SV-07: the automation has its own environment (already set up on this PC)
+.venv\Scripts\python -m pip install "pip==26.3" "setuptools==84.2.1"
+.venv\Scripts\python -m pip install --require-hashes -r requirements.txt   # or requirements-dev.txt to also get pytest
 .venv\Scripts\activate
-pip install -r requirements.txt        # or requirements-dev.txt to also get pytest
 copy config\.env.example .env
 # edit .env and set GEMINI_API_KEY=... (and/or GROQ_API_KEY=... -- see "Choosing a provider" below)
 ```
@@ -113,9 +114,13 @@ run still classifies those images. Delete `automation/dry_run/` whenever you lik
 ## Testing
 
 ```
-pip install -r requirements-dev.txt
-pytest tests/ -v
+.venv\Scripts\python -m pip install --require-hashes -r requirements-dev.txt
+.venv\Scripts\python -m pytest tests/ -v
 ```
+
+`requirements.in` / `requirements-dev.in` list the top-level dependencies; `requirements.txt` /
+`requirements-dev.txt` are generated locks (exact versions + hashes, pip-tools `pip-compile --generate-hashes
+--strip-extras`). Edit the `.in` file and regenerate; never edit a lock by hand.
 
 Tests run against tiny synthetic fixture workbooks in `tests/fixtures/` and a stubbed vision
 client -- no real API calls, no dependency on the real ship files.

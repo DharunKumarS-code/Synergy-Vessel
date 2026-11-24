@@ -231,8 +231,13 @@ File: `.github/workflows/ci.yml` (at the project root, next to `dashboard/` and 
 
 | Job | Steps |
 |---|---|
-| Backend | checkout → Python 3.11 (pip cache) → `pip install -r requirements-dev.txt` → byte-compile + import the app → `pytest` |
+| Backend | checkout → Python 3.11 (pip cache) → `pip install --require-hashes -r requirements-dev.txt` → `pip check` → byte-compile + import the app → `pytest` |
 | Frontend | checkout → Node.js 24 (npm cache) → `npm ci` → `npm test` (Vitest) → `npm run build` |
+| Dependency audit (SV-07) | `npm audit --omit=dev --audit-level=high` (fails on high/critical in shipped packages) → `npm audit` of build/test tools (warning only) → `pip-audit` of the backend and automation locks (fails on any known vulnerability) |
+
+* SV-07: every action is pinned to a full commit SHA (version in a comment), checkout does not keep the token
+  (`persist-credentials: false`), a weekly scheduled run picks up new advisories, and `.github/dependabot.yml`
+  opens grouped weekly pull requests for npm, pip (backend, automation) and GitHub Actions (majors separately).
 
 * Runs on every push, pull request and manually; read-only permissions; a newer run cancels an older one.
 * **No secrets, no AI:** `SYNERGY_AI_PROVIDER=disabled`, `SYNERGY_AI_ALLOW_LIVE=0` (and the same for
@@ -241,6 +246,22 @@ File: `.github/workflows/ci.yml` (at the project root, next to `dashboard/` and 
   6 skipped).
 * **No deployment** job or step exists.
 * No linter is configured in the project, so the backend "validation" step is compile + import.
+
+### Known dependency advisories and limitations (SV-07, 2026-11-24)
+
+SV-07 removed every advisory that had a fix within the current major versions (axios, postcss,
+@remix-run/router, earlier vite issues; pip and setuptools in the backend environment). These remain and are
+accepted until a planned major upgrade:
+
+| Package (version) | Advisories | Severity | Exposure |
+|---|---|---|---|
+| react-router / react-router-dom 6.30.6 (shipped to the browser) | GHSA-wrjc-x8rr-h8h6 (backslash open redirect in `Link`/`useNavigate`), GHSA-337j-9hxr-rhxg (server-side-rendering hydration) | moderate | Low: the app does not build links from user-supplied text and does not use server-side rendering. Fixed only in v7 (major upgrade). CI tolerates them (`--audit-level=high`). |
+| vite 5.4.21, esbuild 0.21.5, vitest 2.1.9, vite-node, tinypool, @vitest/mocker (build/test tools only) | e.g. GHSA-587h-7wmj-h5pm (vite), GHSA-67mh-4wv8-2f99 (esbuild), GHSA-5xrq-8626-4rwp (vitest) | up to critical | None in production: they affect the development and test servers only, and production is served by nginx from `frontend/dist`. Never use `npm run dev` to serve users. Fixed only in new major versions. CI reports them as a warning. |
+
+* **esbuild install script:** npm 11 reports `esbuild@0.21.5 (postinstall: node install.js)` as not yet approved
+  (`npm approve-scripts`). Tests and builds work without it; approving it is a separate decision.
+* **HTTP on localhost only:** nginx listens on 127.0.0.1:8088 over plain HTTP. Before the application is reachable
+  from any other computer, follow the HTTPS requirements in `deploy/nginx/MIGRATION_SV07_PHASE1.md`.
 
 **After `git init` (when you decide to):**
 1. Make sure `.env` files, `dashboard/data/`, the week folders, photographs, backups and `node_modules/` are in

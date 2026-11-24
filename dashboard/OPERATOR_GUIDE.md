@@ -71,9 +71,14 @@ On this computer, both environments are already installed (`backend\.venv` and
 ```powershell
 cd "E:\Synergy Vessel\dashboard\backend"
 python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pip install "pip==26.3" "setuptools==84.2.1"
+.venv\Scripts\python -m pip install --require-hashes -r requirements.txt
 ```
-`requirements-dev.txt` adds the test tools (pytest, httpx); it is only needed for running tests.
+`requirements-dev.txt` adds the test tools (pytest); it is only needed for running tests.
+Both files are **locks** (SV-07): exact versions with SHA-256 hashes, generated from `requirements.in` /
+`requirements-dev.in` by pip-tools. To change a dependency, edit the `.in` file and run
+`.venv\Scripts\pip-compile --generate-hashes --strip-extras requirements.in -o requirements.txt` (and the same for
+`requirements-dev`); never edit a lock by hand.
 
 ### Frontend (Node.js)
 ```powershell
@@ -102,8 +107,11 @@ Open a PowerShell window and run:
 
 ```powershell
 cd "E:\Synergy Vessel\dashboard\backend"
+$env:SYNERGY_TRUSTED_PROXIES = "127.0.0.1"      # SV-07: nginx (on this computer) is the trusted proxy
 .venv\Scripts\python -m uvicorn app.main:app --port 8000 --no-proxy-headers
 ```
+
+(Set the AI variables from "AI provider" in the same window first if AI analysis should be available.)
 
 - The service listens on `http://127.0.0.1:8000`. That is uvicorn's default address, so only this
   computer can reach it. Do **not** add `--host 0.0.0.0`; that would make the data viewable from the network.
@@ -125,24 +133,25 @@ only. Data on disk is not affected.
 
 ## 4. Starting and stopping the frontend
 
-Start the backend first. Then open a **second** PowerShell window:
+**Production (since SV-07, 2026-11-24): nginx serves the built frontend.** Start the backend first. Then:
 
 ```powershell
-cd "E:\Synergy Vessel\dashboard\frontend"
-npm run dev
+cd "E:\Synergy Vessel\dashboard\deploy\nginx"
+& "C:\tools\nginx-1.30.8\nginx.exe" -p "E:/Synergy Vessel/dashboard/deploy/nginx/" -c synergy-vessel.conf
 ```
 
-Open the address it prints, normally **http://localhost:5173**.
+Open **http://127.0.0.1:8088**. nginx serves the files in `frontend\dist\` and forwards every `/api` request to
+the backend at `http://127.0.0.1:8000`. It runs in the background (no window).
 
-- The frontend forwards every `/api` request to the backend at `http://127.0.0.1:8000`, so the
-  browser only talks to port 5173.
-- If `localhost` does not work on your computer, start it with
-  `npm run dev -- --host 127.0.0.1` and open `http://127.0.0.1:5173`.
+**To stop it:**
+`& "C:\tools\nginx-1.30.8\nginx.exe" -p "E:/Synergy Vessel/dashboard/deploy/nginx/" -c synergy-vessel.conf -s quit`
 
-**To stop it:** press **Ctrl+C** in that window.
+**After changing frontend source code**, publish it with `cd "E:\Synergy Vessel\dashboard\frontend"; npm test; npm run build`.
+Changes are not visible on 8088 until the build has run.
 
-> `npm run build` creates a production copy in `frontend\dist\`, and `npm run preview` serves it on
-> port 4173. Neither is needed for day-to-day use.
+**Development only:** `npm run dev` in `frontend\` starts the Vite development server on
+**http://localhost:5173** (hot reload, same `/api` forwarding). Never use it to serve production: it is a
+development tool with its own security advisories. Stop it with **Ctrl+C**.
 
 ---
 
@@ -150,11 +159,11 @@ Open the address it prints, normally **http://localhost:5173**.
 
 | What | Address | Notes |
 |---|---|---|
-| Dashboard (use this) | http://localhost:5173 | Vite dev server; fails to start if 5173 is in use (it does not pick another port) |
+| Dashboard (use this) | http://127.0.0.1:8088 | nginx serving `frontend\dist` (SV-07); this computer only |
+| Development server | http://localhost:5173 | `npm run dev`, development only; fails to start if 5173 is in use |
 | Backend API | http://127.0.0.1:8000 | Listens on this computer only (uvicorn default) |
 | Backend health | http://127.0.0.1:8000/api/health | Quick check that the backend is running |
 | Preview build (optional) | http://localhost:4173 | Only after `npm run build` and `npm run preview` |
-| Local reverse proxy (optional) | http://127.0.0.1:8088 | Only when nginx is started with `dashboard\deploy\nginx\synergy-vessel.conf` (see `INFRASTRUCTURE.md`); this computer only |
 
 If the backend runs on a different address, set `VITE_API_PROXY_TARGET` in
 `dashboard\frontend\.env.local` (for example `VITE_API_PROXY_TARGET=http://127.0.0.1:8001`).
@@ -648,8 +657,8 @@ excluded. It only reads; it never repairs or deletes anything. It prints `VALID`
 - Source and data backups on `E:` are on the **same physical disk** as the project (C:, D: and E: are
   partitions of one disk). They protect against deleted or damaged files, **not against disk failure**.
   Copy the whole `E:\Synergy Vessel Backups` folder to an external drive or another computer regularly.
-- Backend package versions are recorded in `ENVIRONMENT.txt` but `requirements.txt` allows newer
-  versions; install the recorded versions for an exact rebuild.
+- Backend package versions are pinned exactly, with hashes, in `requirements.txt` (SV-07), so
+  `pip install --require-hashes -r requirements.txt` rebuilds the same environment.
 - There is no `restore-source-backup` command: restoring source code is the manual copy in step 1.
 
 ### Recovery-artefact backups (pre-change snapshots)

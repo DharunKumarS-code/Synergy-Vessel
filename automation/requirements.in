@@ -1,0 +1,13 @@
+# Synergy Vessel automation -- top-level RUNTIME dependencies (what the pipeline imports).
+# The installable, exact and hash-pinned lock is requirements.txt, generated from this file:
+#     pip-compile --generate-hashes --strip-extras requirements.in -o requirements.txt
+# (pip-tools; see README "Setup"). Edit THIS file, then regenerate the lock. Do not edit requirements.txt by hand.
+# SV-07: pandas removed -- it was never imported anywhere in the project.
+openpyxl>=3.1
+Pillow>=10
+PyYAML>=6
+python-dotenv>=1
+tenacity>=8.2
+google-genai>=0.3
+groq>=0.9
+pydantic>=2

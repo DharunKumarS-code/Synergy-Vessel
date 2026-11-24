@@ -1,0 +1,6 @@
+# Synergy Vessel automation -- development and test dependencies, on top of the runtime ones.
+# Lock: requirements-dev.txt (exact versions + hashes, includes everything in requirements.txt):
+#     pip-compile --generate-hashes --strip-extras requirements-dev.in -o requirements-dev.txt
+-r requirements.in
+-c requirements.txt
+pytest>=8

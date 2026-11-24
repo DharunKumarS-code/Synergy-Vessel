@@ -84,16 +84,23 @@ The state file name replaces spaces with underscores (`Week 30` -> `Week_30.json
 
 ### Python environment
 
-- Dependencies are listed in `requirements.txt`: openpyxl, Pillow, pandas, PyYAML,
-  python-dotenv, tenacity, google-genai, groq, pydantic. `requirements-dev.txt` adds pytest.
-- At the time of writing, the `python` on PATH (3.11.9) has all of them installed. To set up a
-  fresh environment:
+- Top-level dependencies are listed in `requirements.in`: openpyxl, Pillow, PyYAML, python-dotenv,
+  tenacity, google-genai, groq, pydantic (`requirements-dev.in` adds pytest). `requirements.txt` and
+  `requirements-dev.txt` are the **locks**: exact versions with SHA-256 hashes (SV-07, 2026-11-24).
+- The pipeline runs in its own virtual environment, `automation\.venv` (SV-07), not the system `python`.
+  It already exists on this computer. To set it up on a new computer or after deleting it:
 
 ```powershell
+cd "E:\Synergy Vessel\automation"
 python -m venv .venv
+.venv\Scripts\python -m pip install "pip==26.3" "setuptools==84.2.1"
+.venv\Scripts\python -m pip install --require-hashes -r requirements-dev.txt
 .venv\Scripts\activate
-pip install -r requirements-dev.txt
 ```
+
+- To change a dependency: edit `requirements.in`, then regenerate both locks with pip-tools
+  (`pip-compile --generate-hashes --strip-extras requirements.in -o requirements.txt`, and the same for
+  `requirements-dev.in` -> `requirements-dev.txt`), install, and run the offline tests.
 
 - To check the installation without real data or an API key, run the offline test suite (it
   uses synthetic fixtures and refuses to open the real `.env`):
