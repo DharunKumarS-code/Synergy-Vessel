@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root { color-scheme: dark; }
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-surface-950 text-ink font-sans antialiased;
+  }
+  ::selection { background: rgba(144, 202, 249, 0.3); }
+  * { scrollbar-width: thin; scrollbar-color: theme(colors.surface.600) transparent; }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-surface-700/70 bg-surface-850 shadow-card;
+  }
+  .card-header {
+    @apply flex items-center justify-between gap-3 border-b border-surface-700/60 px-5 py-4;
+  }
+  .card-title { @apply text-sm font-semibold tracking-wide text-ink; }
+  .card-subtitle { @apply text-xs text-ink-faint; }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-md border border-surface-600/70 bg-surface-800 px-2 py-0.5 text-xs text-ink-muted;
+  }
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900;
+  }
+  .skeleton { @apply animate-pulse rounded bg-surface-700/60; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

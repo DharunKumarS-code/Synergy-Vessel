@@ -1,0 +1,63 @@
+# Active provider/model. To switch to Groq, set provider: groq and model: qwen/qwen3.8-27b
+# (requires GROQ_API_KEY in .env -- see config/.env.example -- AND rate_limit.groq_requests_per_minute,
+# see below). Gemini is the default (live-tested on 7 photos with an earlier prompt only);
+# Groq is experimental: 3 of its 7 live single-photo calls returned invalid JSON -- see README
+# "Live-testing status" and "Groq provider".
+provider: gemini
+model: gemini-3.8-flash
+
+rate_limit:
+  # Phase AE3: max_retries / backoff_seconds / max_backoff_seconds / jitter_seconds configure
+  # Gemini's retry of 5xx (e.g. 503 UNAVAILABLE) errors only -- 429 and other 4xx are never
+  # retried. max_retries counts retries AFTER the first attempt (4 -> 5 attempts per image).
+  # Waits: min(backoff * 2**(n-1) + uniform(0, jitter), max_backoff) -> ~4-8, 8-12, 16-20, 32-36s.
+  # circuit_breaker_threshold: stop the whole run after this many CONSECUTIVE images (across
+  # weeks) still fail with a 5xx after all retries; any successful call resets the count.
+  # Groq keeps its own fixed retry settings (5xx only, 5 attempts, SDK retries off, 60s timeout)
+  # and ignores this block, except circuit_breaker_threshold (run-level) -- since Phase P2-8
+  # Groq 5xx-after-retries and timeouts count toward it, and any Groq 429 stops the run.
+  max_retries: 4
+  backoff_seconds: 4
+  max_backoff_seconds: 60
+  jitter_seconds: 4
+  circuit_breaker_threshold: 2
+  # Phase AE5: per-request HTTP timeout for Gemini (integer seconds, >= 30). Also sent to Google
+  # as X-Server-Timeout. Successful calls have taken up to 214s, so keep this generous: too low
+  # cuts off real answers and makes the server return 504s. A timed-out request is never retried
+  # within the same image; it counts toward circuit_breaker_threshold (tracked separately from
+  # server errors) and is retried automatically on the next run.
+  request_timeout_seconds: 300
+  # Phase P1-1: requests_per_minute (Gemini only) is this project's own client-side pacing cap:
+  # every HTTP request start (retries included) is spaced at least 60/requests_per_minute
+  # seconds after the previous one (15 -> 4s). It is NOT Google's published limit -- Google's
+  # docs give no per-model free-tier RPM, so keep it conservative. Integer >= 1, or null to
+  # disable. Gemini per-minute 429s are handled separately: one wait (Google's retryDelay, or
+  # max_backoff_seconds if none; never longer than max_backoff_seconds) and one retry per image,
+  # then the run stops. Ambiguous 429s are never retried and stop the run.
+  # Groq ignores this setting -- it has its own, groq_requests_per_minute (below).
+  requests_per_minute: 15
+  # Phase P2-9: groq_requests_per_minute (Groq only) -- Groq's own client-side pacing cap, fully
+  # independent of requests_per_minute above: Groq request starts (5xx retries included) are
+  # spaced at least 60/groq_requests_per_minute seconds apart. REQUIRED when provider: groq --
+  # there is deliberately NO default: a live Groq run without it stops with a configuration error
+  # before any request. Integer >= 1 (0, negatives, decimals, text are rejected in every mode).
+  # Choose it yourself from YOUR Groq account's limits for the model (requests AND tokens per
+  # minute -- each photo request uses several thousand tokens); it is a safety cap, not Groq's
+  # quota. Pacing does not guarantee no 429: any Groq 429 still stops the run after one request.
+  # Uncomment and set when switching to Groq:
+  # groq_requests_per_minute: <your value>
+
+paths:
+  project_root: "E:\\Synergy Vessel"
+  automation_root: "E:\\Synergy Vessel\\automation"
+  state_dir: "E:\\Synergy Vessel\\automation\\.state"
+  logs_dir: "E:\\Synergy Vessel\\automation\\logs"
+
+report:
+  output_filename: "Final Official vs AI Location Report.xlsx"
+  extracted_images_dirname: "Extracted Images"
+  image_cell_max_width_px: 420
+  image_cell_max_height_px: 320
+
+processing:
+  heading_min_merge_width: 10

@@ -1,0 +1,10 @@
+fastapi>=0.115,<1
+uvicorn>=0.30
+pydantic>=2.7,<3
+openpyxl>=3.1
+# Phase 5: only needed for the opt-in live Gemini provider (same packages as automation/requirements.txt)
+google-genai>=0.3
+tenacity>=8.2
+Pillow>=10
+PyYAML>=6
+python-dotenv>=1

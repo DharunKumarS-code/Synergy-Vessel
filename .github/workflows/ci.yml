@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SYNERGY_AI_PROVIDER: disabled
+  SYNERGY_AI_ALLOW_LIVE: "0"
+  SYNERGY_LOCATION_AI_PROVIDER: disabled
+  SYNERGY_LOCATION_AI_ALLOW_LIVE: "0"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  backend:
+    name: Backend (FastAPI) tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: dashboard/backend
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: dashboard/backend/requirements*.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Basic validation (byte-compile and import the app)
+        run: |
+          python -m compileall -q app
+          python -c "import app.main"
+
+      - name: Run backend tests
+        run: python -m pytest -p no:warnings
+
+  frontend:
+    name: Frontend (React) tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: dashboard/frontend
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: dashboard/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build

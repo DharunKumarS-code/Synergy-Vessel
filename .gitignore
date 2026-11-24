@@ -1,0 +1,201 @@
+# Synergy Vessel -- root .gitignore (security review Phase 1, 2026-11-23)
+#
+# Purpose: keep secrets, historical vessel data, generated output and dependencies out of Git.
+# Rules are written for the actual layout of this project. Source code, tests, documentation,
+# requirements/package files, CI, nginx config and *.example templates stay trackable.
+#
+# Note: a "!" exception cannot re-include a file whose parent FOLDER is ignored, so folder rules
+# below are only used where nothing inside the folder should ever be tracked.
+
+# =============================================================================
+# 1. Environment files and secrets
+# =============================================================================
+.env
+.env.*
+*.env
+!.env.example
+!.env.template
+!*.env.example
+!*.env.template
+
+# Private keys, certificates, keystores
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.ppk
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+
+# Credential / secret files (service-account JSON, local secret config)
+credentials.json
+credentials*.json
+service-account*.json
+client_secret*.json
+secrets.json
+secrets.yaml
+secrets.yml
+*.secret
+*.secrets
+
+# Local Claude Code settings (may contain machine-specific permissions)
+.claude/settings.local.json
+
+# =============================================================================
+# 2. Synergy Vessel private data
+# =============================================================================
+# Historical inspection weeks (Week 30 ... Week 42): Excel registers, Deck Photos workbooks,
+# final reports (.xlsx/.json) and every extracted photograph. Folder names vary in case.
+/[Ww][Ee][Ee][Kk] */
+/[Ww][Ee][Ee][Kk]_*/
+
+# Dashboard runtime data: accounts (password hashes), audit log + chain head, AI condition
+# assessments and review records, Excel import history, staged imports, location synonyms.
+/dashboard/data/
+# (Named in the security plan; does not exist today -- protected in case it is ever created.)
+/dashboard/backend/data/
+
+# Root-level generated summaries
+/extraction_summary.csv
+
+# Backups and recovery copies created inside the project (the main backup folder,
+# "E:\Synergy Vessel Backups", is outside this repository)
+/automation/backups/
+/dashboard/backups/
+/backups/
+*.bak
+*.backup
+*.old
+*.orig
+
+# Excel workbooks and spreadsheet exports anywhere (vessel registers / reports) ...
+*.xlsx
+*.xlsm
+*.xlsb
+*.xls
+*.csv
+~$*
+# ... except the small synthetic test fixtures the automation tests need
+!/automation/tests/fixtures/*.xlsx
+
+# Photographs anywhere (inspection photos, extracted images) ...
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
+*.png
+*.PNG
+*.heic
+*.HEIC
+*.bmp
+*.tif
+*.tiff
+*.webp
+*.gif
+# ... except frontend UI assets
+!/dashboard/frontend/public/**
+!/dashboard/frontend/src/assets/**
+
+# Generated PDF reports
+*.pdf
+
+# =============================================================================
+# 3. Automation pipeline private / generated data
+# =============================================================================
+/automation/.state/
+/automation/logs/
+/automation/output/
+/automation/live_tests/
+/automation/tests/manual/output/
+
+# Dashboard experiment output (live AI evaluation results contain real records)
+/dashboard/backend/experiments/**/results/
+
+# nginx runtime folders (created when the local proxy is started)
+/dashboard/deploy/nginx/logs/
+/dashboard/deploy/nginx/temp/
+
+# =============================================================================
+# 4. Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# =============================================================================
+# 5. Node.js / frontend
+# =============================================================================
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+.cache/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =============================================================================
+# 6. Logs and temporary files
+# =============================================================================
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+tmp/
+temp/
+
+# =============================================================================
+# 7. IDE and operating system
+# =============================================================================
+# VS Code: ignore personal state, keep shared settings/recommendations if added later
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+*.code-workspace
+.history/
+
+# JetBrains
+.idea/
+*.iml
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
