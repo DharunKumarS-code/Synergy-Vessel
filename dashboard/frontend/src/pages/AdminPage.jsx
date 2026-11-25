@@ -1,5 +1,7 @@
 import { CheckCircle2, Loader2, ShieldAlert, ShieldCheck, UserPlus, XCircle } from 'lucide-react'
 import { useCallback, useEffect, useId, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import ViewpointReview from '../components/admin/ViewpointReview'
 import { EmptyState, ErrorState, Skeleton } from '../components/ui/StateViews'
 import { ROLE_LABELS, useAuth } from '../context/AuthContext'
 import { createUser, getAuditEntries, listUsers, updateUser, verifyAudit } from '../services/api'
@@ -190,8 +192,12 @@ function Audit() {
   )
 }
 
+const SECTIONS = [['accounts', 'Accounts and audit log'], ['viewpoints', 'Viewpoints']]
+
 export default function AdminPage() {
   const { user, isAdmin, checking, requireSignIn } = useAuth()
+  const [params, setParams] = useSearchParams()
+  const section = params.get('section') === 'viewpoints' ? 'viewpoints' : 'accounts'
   if (checking) return <Skeleton className="h-40 w-full rounded-xl" />
   if (!isAdmin) {
     return (
@@ -212,8 +218,23 @@ export default function AdminPage() {
   return (
     <div className="space-y-6">
       <p className="flex items-center gap-2 text-sm text-ink-muted"><ShieldCheck size={16} className="text-accent" aria-hidden="true" /> Signed in as {user.display_name} (Administrator)</p>
-      <Users />
-      <Audit />
+      <div role="tablist" aria-label="Administration sections" className="flex gap-2">
+        {SECTIONS.map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={section === key}
+            onClick={() => setParams(key === 'accounts' ? {} : { section: key })}
+            className={`${btn} border ${section === key ? 'border-accent bg-accent/10 text-ink' : 'border-surface-600 text-ink-muted hover:text-ink'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {section === 'viewpoints' ? (
+        <ViewpointReview initialLocation={params.get('location') ?? ''} />
+      ) : (
+        <>
+          <Users />
+          <Audit />
+        </>
+      )}
     </div>
   )
 }

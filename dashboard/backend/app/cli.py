@@ -9,6 +9,8 @@
     .venv\\Scripts\\python -m app.cli create-recovery-backup [--note TEXT] | list-recovery-backups | verify-recovery-backup ID
     (every verify-* command accepts --report: also save the result in <backup folder>\\Backup Reports)
     .venv\\Scripts\\python -m app.cli copy-backups-offline --to F:\\      (external drive only; copy + verify)
+    .venv\\Scripts\\python -m app.cli generate-viewpoints [--dry-run | --out FOLDER] [--replace-proposals]
+        (SV-08: propose the viewpoint mapping; read-only on historical data, nothing is approved automatically)
 
 Passwords are read with getpass (no echo), confirmed, and never printed or logged. No account is ever
 created automatically and no default credentials exist.
@@ -74,6 +76,56 @@ def verify_audit(auth_dir, out=print) -> int:
     for p in result.problems:
         out(f"  - {p}")
     return 0 if result.valid else 1
+
+
+def generate_viewpoints_command(settings: Settings, args, out=print) -> int:
+    """SV-08: propose the viewpoint mapping from the loaded inspection data. Historical files are only read. The
+    mapping is written to the viewpoint folder (or --out); a mapping that already holds administrator decisions is
+    never overwritten."""
+    from .imports.store import write_atomic
+    from .services import viewpoints as vp
+    from .services.inspection_store import InspectionStore
+
+    store = InspectionStore.build(settings)
+    data = vp.generate(store.records, settings.unlabelled_placeholder)
+    val = vp.validate_mapping(data, store.by_id)
+    if not val.ok:
+        out("Error: the generated mapping failed validation: " + "; ".join(val.errors[:5]))
+        return 1
+    s = vp.summarise(data)
+    out(f"Records {len(store.records)} | viewpoints {s['viewpoints']} | linked {s['linked_records']} | "
+        f"members {s['members']} | findings {s['findings']}")
+    if args.dry_run:
+        out("Dry run: nothing was written.")
+        return 0
+    folder = Path(args.out or settings.resolved_viewpoint_dir).resolve()
+    files = vp.ViewpointStore(folder)
+    with files.lock:
+        existing = None
+        if files.path.exists():
+            try:
+                existing = files.read()
+            except (OSError, ValueError):
+                out(f"Error: {files.path} exists but cannot be read. Nothing was written; restore it from a backup.")
+                return 3
+        if existing is not None:
+            if vp.has_decisions(existing):
+                out(f"Error: {files.path} already contains administrator decisions. It was NOT overwritten. "
+                    "Review changes in the dashboard instead (Admin > Viewpoints).")
+                return 3
+            if not args.replace_proposals:
+                out(f"Error: {files.path} already exists (proposals only). Use --replace-proposals to regenerate it.")
+                return 3
+            data["revision"] = int(existing.get("revision") or 0) + 1
+        files.write(data)
+        write_atomic(folder, vp.REPORT_FILE, vp.render_report(data, len(store.records)).encode("utf-8"))
+    if args.out is None:
+        AuditLog(settings.resolved_auth_dir).record(
+            "viewpoints_generated", actor=CLI_ACTOR, target=vp.MAPPING_FILE,
+            details={"revision": data["revision"], "viewpoints": s["viewpoints"], "linked_records": s["linked_records"],
+                     "members": s["members"], "replaced_proposals": existing is not None, "via": "cli"})
+    out(f"Wrote {files.path} and {folder / vp.REPORT_FILE}. Nothing is approved yet: review in Admin > Viewpoints.")
+    return 0
 
 
 def _mb(n: int) -> str:
@@ -295,6 +347,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     p = sub.add_parser("copy-backups-offline",
                        help="copy + verify the whole backup collection onto a SEPARATE physical drive (manual, never mirrors)")
     p.add_argument("--to", required=True, type=Path, help="absolute path on the external drive, e.g. F:\\")
+    p = sub.add_parser("generate-viewpoints", help="SV-08: propose the viewpoint mapping (nothing approved automatically)")
+    p.add_argument("--dry-run", action="store_true", help="only print the summary")
+    p.add_argument("--out", type=Path, default=None, help="write to this folder instead of the viewpoint folder (no audit entry)")
+    p.add_argument("--replace-proposals", action="store_true",
+                   help="replace an existing mapping that has no administrator decisions")
     args = parser.parse_args(argv)
     settings = get_settings()
     auth_dir = settings.resolved_auth_dir
@@ -302,6 +359,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         return source_backup_command(settings, args)
     if args.command in ("create-recovery-backup", "list-recovery-backups", "verify-recovery-backup"):
         return recovery_backup_command(settings, args)
+    if args.command == "generate-viewpoints":
+        return generate_viewpoints_command(settings, args)
     if args.command == "copy-backups-offline":
         return offline_copy_command(settings, args)
     if args.command.endswith(("-backup", "-backups")):

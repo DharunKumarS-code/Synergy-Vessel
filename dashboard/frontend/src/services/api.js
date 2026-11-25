@@ -421,3 +421,27 @@ export const verifyImport = (importId) => importAction('get', `/api/imports/${en
 export const decideLocation = (importId, rowNumber, action, location) =>
   importAction('post', `/api/imports/${encodeURIComponent(importId)}/locations`,
     { row_number: rowNumber, action, ...(action === 'manual' || (action === 'accept' && location) ? { location } : {}) })
+
+/* ------------------------------------------------------------------ SV-08: physical viewpoint mapping */
+async function viewpointRequest(method, url, { params, data, signal } = {}) {
+  try {
+    const res = await http.request({ method, url, params, data, signal })
+    return res.data
+  } catch (err) {
+    throw toAuthError(err)   // the server's { detail, code } is already user-facing
+  }
+}
+/** GET /api/inspections/viewpoints -> { location, mapping: {available, revision, problem}, weeks[], viewpoints[], unlinked[] } */
+export const getViewpoints = ({ location, vessel } = {}, signal) =>
+  viewpointRequest('get', '/api/inspections/viewpoints', { params: clean({ location, vessel }), signal })
+/** GET /api/inspections/viewpoints/groups -> { mapping, groups: [{ group_id, display_name, locations: [{location, viewpoint_count}] }] } */
+export const getViewpointGroups = ({ vessel } = {}, signal) =>
+  viewpointRequest('get', '/api/inspections/viewpoints/groups', { params: clean({ vessel }), signal })
+/** GET /api/admin/viewpoints/review (administrators) */
+export const getViewpointReview = (filters = {}, signal) =>
+  viewpointRequest('get', '/api/admin/viewpoints/review', { params: clean(filters), signal })
+/** GET /api/admin/viewpoints/history (administrators) */
+export const getViewpointHistory = (filters = {}, signal) =>
+  viewpointRequest('get', '/api/admin/viewpoints/history', { params: clean(filters), signal })
+/** POST /api/admin/viewpoints/decisions { action, revision, viewpoint_id, record_ids?, target_viewpoint_id?, at_week?, display_name?, notes? } */
+export const decideViewpoint = (body) => viewpointRequest('post', '/api/admin/viewpoints/decisions', { data: body })

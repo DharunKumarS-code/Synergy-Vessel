@@ -46,6 +46,13 @@ DEFAULT_DATA_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ANALYSIS_DIR = DEFAULT_DATA_ROOT / "dashboard" / "data" / "condition_analyses"
 DEFAULT_IMPORT_DIR = DEFAULT_DATA_ROOT / "dashboard" / "data" / "imports"
 DEFAULT_AUTH_DIR = DEFAULT_DATA_ROOT / "dashboard" / "data" / "auth"
+# SV-08 -- viewpoint mapping (additional metadata, separate from all historical source data).
+DEFAULT_VIEWPOINT_DIR = DEFAULT_DATA_ROOT / "dashboard" / "data" / "locations"
+# SV-08: AI condition analysis only for two photographs that an administrator approved as the same physical viewpoint.
+# Production value; there is deliberately no environment variable to switch it off. (The test suite lowers the
+# resolved default for tests written before SV-08 that analyse ad-hoc pairs; SV-08 tests run with it on.)
+VIEWPOINT_AI_GATE_PRODUCTION = True
+DEFAULT_VIEWPOINT_AI_GATE = VIEWPOINT_AI_GATE_PRODUCTION
 # Next to the project, never inside it, so a backup can never include itself.
 DEFAULT_BACKUP_DIR = DEFAULT_DATA_ROOT.parent / "Synergy Vessel Backups"
 AI_PROVIDERS = ("disabled", "mock", "gemini", "groq")
@@ -103,6 +110,10 @@ class Settings:
     # Phase 8.3 -- backups. None -> DEFAULT_BACKUP_DIR (resolved at call time, like auth_dir).
     backup_dir: Path | None = None
 
+    # SV-08 -- viewpoint mapping. None -> DEFAULT_VIEWPOINT_DIR / DEFAULT_VIEWPOINT_AI_GATE (resolved at call time).
+    viewpoint_dir: Path | None = None
+    viewpoint_ai_gate: bool | None = None
+
     # Phase 9 -- Excel Location Intelligence (own configuration; the API key is never stored here).
     location_ai_provider: str = "disabled"
     location_ai_model: str | None = None
@@ -134,6 +145,16 @@ class Settings:
         import sys
         return self.backup_dir or sys.modules[__name__].DEFAULT_BACKUP_DIR
 
+    @property
+    def resolved_viewpoint_dir(self) -> Path:
+        import sys
+        return self.viewpoint_dir or sys.modules[__name__].DEFAULT_VIEWPOINT_DIR
+
+    @property
+    def resolved_viewpoint_ai_gate(self) -> bool:
+        import sys
+        return sys.modules[__name__].DEFAULT_VIEWPOINT_AI_GATE if self.viewpoint_ai_gate is None else self.viewpoint_ai_gate
+
 
 def get_settings() -> Settings:
     env = os.environ
@@ -148,6 +169,8 @@ def get_settings() -> Settings:
         kwargs["auth_dir"] = Path(env["SYNERGY_AUTH_DIR"]).resolve()
     if env.get("SYNERGY_ANALYSIS_DIR"):
         kwargs["analysis_dir"] = Path(env["SYNERGY_ANALYSIS_DIR"]).resolve()
+    if env.get("SYNERGY_VIEWPOINT_DIR"):
+        kwargs["viewpoint_dir"] = Path(env["SYNERGY_VIEWPOINT_DIR"]).resolve()
     provider = env.get("SYNERGY_AI_PROVIDER", "disabled").strip().lower()
     kwargs["ai_provider"] = provider if provider in AI_PROVIDERS else "disabled"
     kwargs["ai_allow_live"] = env.get("SYNERGY_AI_ALLOW_LIVE", "").strip() == "1"

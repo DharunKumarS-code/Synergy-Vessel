@@ -13,7 +13,7 @@ from ..infra.circuit_breaker import CircuitBreaker, CircuitOpen
 from ..models import InspectionRecord
 from ..services.image_service import ImageNotFound, InvalidImageId
 from ..services.inspection_store import InspectionStore
-from .pair_validation import PairValidation, PairValidator
+from .pair_validation import Issue, PairValidation, PairValidator
 from .prompts import PROMPT_VERSION, build_prompt
 from .providers import ConditionProvider, ImageInput, ProviderError
 from .records import AnalysisRecord, CompareRequest, PhotoRef, RequestedBy, ReviewEvent, ReviewRequest, ReviewStatus
@@ -27,6 +27,7 @@ VALIDATION_STATUS = {
     "unknown_record": 404, "same_record": 400, "different_vessels": 400, "undated_record": 422,
     "same_inspection_date": 400, "invalid_date_order": 400, "same_image": 400,
     "photograph_unavailable": 422, "photograph_unreadable": 422, "file_integrity": 422,
+    "viewpoint_not_approved": 409,
 }
 # Warnings that make any model classification untrustworthy: the result is downgraded to NEEDS_REVIEW.
 DOWNGRADING_WARNINGS = {"visually_identical", "near_duplicate", "location_conflict"}
@@ -55,6 +56,8 @@ class AnalysisService:
         self._lock = threading.Lock()
         self._in_flight: set[str] = set()
         self.validator = PairValidator(inspections)
+        # SV-08: the viewpoint gate (a ViewpointService). Set by create_app; None only in tests of pre-SV-08 behaviour.
+        self.viewpoints = None
 
     # ------------------------------------------------------------------ status
     def status(self) -> dict:
@@ -107,8 +110,31 @@ class AnalysisService:
 
     # ------------------------------------------------------------------ compare
     def validate(self, earlier_record_id: str, later_record_id: str) -> PairValidation:
-        """Pre-analysis eligibility check. Reads only the two selected files; never calls the AI."""
-        return self.validator.validate(earlier_record_id, later_record_id)
+        """Pre-analysis eligibility check. Reads only the two selected files; never calls the AI.
+
+        SV-08: when the viewpoint gate is active (``self.viewpoints`` set, always in production) a pair is eligible
+        only when both photographs are approved members of the same physical viewpoint. Identical files stay
+        blocked by ``same_image``. This check runs before the saved-result reuse, so nothing reaches the AI otherwise."""
+        v = self.validator.validate(earlier_record_id, later_record_id)
+        gate = self.viewpoints
+        if gate is not None and not any(i.code in ("same_record", "unknown_record") for i in v.errors):
+            status = gate.pair_status(earlier_record_id, later_record_id)
+            v.viewpoint = status
+            if status["status"] not in ("approved", "not_retaken"):
+                v.errors.append(Issue(code="viewpoint_not_approved", severity="error",
+                                      message="Viewpoint mapping requires admin review: AI analysis is only available "
+                                              "for two photographs approved as the same viewpoint. " + status["message"]))
+                v = PairValidator._finish(v)
+            elif status["status"] == "approved" and any(i.code == "ai_only_location" for i in v.warnings):
+                # An administrator has confirmed both photographs as the same physical viewpoint, so the match no
+                # longer rests only on AI-suggested locations. Only this warning is replaced; every other warning
+                # (mixed / conflicting / missing locations, duplicates, image quality) is kept.
+                v.warnings = [i for i in v.warnings if i.code != "ai_only_location"]
+                v.info.append(Issue(code="viewpoint_verified_location", severity="info",
+                                    message="Neither photograph has an Official Location, but an administrator approved "
+                                            "both as the same viewpoint."))
+                v = PairValidator._finish(v)
+        return v
 
     def validate_pair(self, req: CompareRequest) -> tuple[InspectionRecord, InspectionRecord, PairValidation]:
         v = self.validate(req.earlier_record_id, req.later_record_id)

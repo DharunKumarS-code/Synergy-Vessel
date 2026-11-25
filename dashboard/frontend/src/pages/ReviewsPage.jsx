@@ -5,6 +5,7 @@ import { RESULT_GROUPS, RESULTS, ResultBadge, resultGroup, resultNote, simpleRes
 import ReviewActions, { REVIEW_LABELS, ReviewHistory } from '../components/compare/ReviewActions'
 import Photo from '../components/search/Photo'
 import { EmptyState, ErrorState, Skeleton } from '../components/ui/StateViews'
+import { useAuth } from '../context/AuthContext'
 import { useVessel } from '../context/VesselContext'
 import { useApi } from '../hooks/useApi'
 import { useUrlParams } from '../hooks/useUrlParams'
@@ -186,6 +187,7 @@ function ReviewDetail({ id, onClose, onReviewed }) {
 }
 
 export default function ReviewsPage() {
+  const { canReview } = useAuth()
   const [params, mutate] = useUrlParams()
   const showAll = params.get('show') === 'all'
   const openId = params.get('id')
@@ -222,7 +224,8 @@ export default function ReviewsPage() {
           <div>
             <h2 id="reviews-title" className="text-xl font-semibold tracking-tight text-ink">Reviews</h2>
             <p className="mt-1 text-sm text-ink-muted">
-              AI condition assessments are suggestions until a reviewer approves them. Open an assessment to see both photos and record your decision.
+              AI condition assessments are suggestions until a reviewer approves them.{' '}
+              {canReview ? 'Open an assessment to see both photos and record your decision.' : 'Open an assessment to see both photos and its review status.'}
             </p>
           </div>
         </div>

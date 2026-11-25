@@ -213,4 +213,16 @@ describe('Dashboard condition cards', () => {
     await within(detail).findByLabelText('Review status')
     expect(within(detail).queryByRole('button', { name: /Approve|Reject|Reassessment/ })).toBeNull()
   })
+
+  it('tells a viewer the page shows the review status, and a reviewer to record a decision (SV-08 wording)', async () => {
+    api.getSession.mockResolvedValue({ authenticated: true, user: fx.viewerUser })
+    const { unmount } = renderAt('/reviews')
+    const intro = await screen.findByText(/AI condition assessments are suggestions/)
+    expect(intro).toHaveTextContent('Open an assessment to see both photos and its review status.')
+    expect(intro).not.toHaveTextContent('record your decision')
+    unmount()
+    api.getSession.mockResolvedValue({ authenticated: true, user: fx.reviewerUser })
+    renderAt('/reviews')
+    expect(await screen.findByText(/AI condition assessments are suggestions/)).toHaveTextContent('Open an assessment to see both photos and record your decision.')
+  })
 })

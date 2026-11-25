@@ -125,11 +125,18 @@ def _isolated_auth(tmp_path_factory):
     from app.auth import passwords
 
     old_dir, old_backup, old_iter = config.DEFAULT_AUTH_DIR, config.DEFAULT_BACKUP_DIR, passwords.ITERATIONS
+    old_vp, old_gate = config.DEFAULT_VIEWPOINT_DIR, config.DEFAULT_VIEWPOINT_AI_GATE
     config.DEFAULT_AUTH_DIR = tmp_path_factory.mktemp("auth-default")
     config.DEFAULT_BACKUP_DIR = tmp_path_factory.mktemp("backup-default")  # Phase 8.3: never the real backup folder
+    config.DEFAULT_VIEWPOINT_DIR = tmp_path_factory.mktemp("viewpoints-default")  # SV-08: never dashboard/data/locations
+    # SV-08: tests written before SV-08 analyse ad-hoc synthetic pairs without a viewpoint mapping, so the suite
+    # resolves the AI viewpoint gate OFF by default. Production has no switch (config.VIEWPOINT_AI_GATE_PRODUCTION);
+    # every SV-08 test turns the gate on explicitly (Settings(viewpoint_ai_gate=True)).
+    config.DEFAULT_VIEWPOINT_AI_GATE = False
     passwords.ITERATIONS = 1_000
     yield
     config.DEFAULT_AUTH_DIR, config.DEFAULT_BACKUP_DIR, passwords.ITERATIONS = old_dir, old_backup, old_iter
+    config.DEFAULT_VIEWPOINT_DIR, config.DEFAULT_VIEWPOINT_AI_GATE = old_vp, old_gate
 
 
 TEST_PASSWORD = "correct-horse-battery-1"

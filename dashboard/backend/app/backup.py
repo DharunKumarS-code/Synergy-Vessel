@@ -8,6 +8,7 @@ Backup layout (under SYNERGY_BACKUP_DIR)::
         files/app/condition_analyses/...                        (SYNERGY_ANALYSIS_DIR)
         files/app/imports/...                                   (SYNERGY_IMPORT_DIR)
         files/app/auth/...                                      (SYNERGY_AUTH_DIR)
+        files/app/locations/...                                 (SYNERGY_VIEWPOINT_DIR; SV-08 viewpoint mapping)
 
 Safety:
 * Sources are only ever opened for reading. Each file is hashed while it is copied, the copy is
@@ -41,7 +42,8 @@ STAGING_PREFIX = ".staging-"
 RESTORE_STAGING_PREFIX = ".restore-staging-"
 BACKUP_ID_RE = re.compile(r"^BKP-\d{8}-\d{6}-[0-9a-f]{6}$")
 WEEK_NAME_RE = re.compile(r"^week\s*\d{1,3}$", re.I)
-SECTIONS = ("historical", "app/condition_analyses", "app/imports", "app/auth")
+# SV-08 added "app/locations"; older backups simply have no files in it (they still verify and restore).
+SECTIONS = ("historical", "app/condition_analyses", "app/imports", "app/auth", "app/locations")
 CHUNK = 1024 * 1024
 
 # Never backed up. Every exclusion is counted in the manifest (nothing is skipped silently).
@@ -140,7 +142,7 @@ def collect_sources(settings: Settings) -> list[Source]:
     if not root.is_dir():
         raise BackupError(f"data root not found: {root}")
     app_dirs = {"app/condition_analyses": settings.analysis_dir, "app/imports": settings.import_dir,
-                "app/auth": settings.resolved_auth_dir}
+                "app/auth": settings.resolved_auth_dir, "app/locations": settings.resolved_viewpoint_dir}
     for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
         if child.is_dir():
             if (child / settings.report_filename).is_file() or WEEK_NAME_RE.match(child.name):
@@ -227,7 +229,8 @@ def create_backup(settings: Settings, *, note: Optional[str] = None) -> dict:
             "note": (note or "")[:200] or None,
             "sources": [{"section": s.section, "path": str(s.path), "kind": s.kind, "present": s.path.exists()} for s in sources],
             "restore_targets": {"historical": "SYNERGY_DATA_ROOT", "app/condition_analyses": "SYNERGY_ANALYSIS_DIR",
-                                "app/imports": "SYNERGY_IMPORT_DIR", "app/auth": "SYNERGY_AUTH_DIR"},
+                                "app/imports": "SYNERGY_IMPORT_DIR", "app/auth": "SYNERGY_AUTH_DIR",
+                                "app/locations": "SYNERGY_VIEWPOINT_DIR"},
             "excluded": excluded,
             "file_count": len(files),
             "total_bytes": sum(f["size"] for f in files),
@@ -350,6 +353,7 @@ def verify_backup(settings: Settings, backup_id: str) -> VerifyReport:
 # ============================================================================ restore
 def _protected_paths(settings: Settings) -> list[Path]:
     return [settings.data_root, settings.analysis_dir, settings.import_dir, settings.resolved_auth_dir,
+            settings.resolved_viewpoint_dir,
             settings.resolved_backup_dir, Path(__file__).resolve().parents[1]]
 
 
@@ -383,6 +387,7 @@ it with these environment variables (PowerShell example):
   $env:SYNERGY_ANALYSIS_DIR = "{dest}\\app\\condition_analyses"
   $env:SYNERGY_IMPORT_DIR   = "{dest}\\app\\imports"
   $env:SYNERGY_AUTH_DIR     = "{dest}\\app\\auth"
+  $env:SYNERGY_VIEWPOINT_DIR = "{dest}\\app\\locations"
 
 Check the restored dashboard first. Replacing the production folders with this copy is a deliberate,
 manual step: stop the backend, move the current production folders aside (do not delete them), copy
@@ -408,7 +413,7 @@ def restore_backup(settings: Settings, backup_id: str, dest: Path) -> dict:
             size, digest = _copy_hashed(folder / FILES / Path(*rel.parts), target)
             if size != f["size"] or digest != f["sha256"]:
                 raise BackupError(f"restored file does not match the manifest: {rel}")
-        for section in ("historical", "app/condition_analyses", "app/imports", "app/auth"):
+        for section in SECTIONS:
             staging.joinpath(*section.split("/")).mkdir(parents=True, exist_ok=True)
         checked, problems = _verify_tree(staging, m["files"], "restore")
         problems = [p for p in problems if not p.startswith("unexpected file")]  # only README/marker are added below

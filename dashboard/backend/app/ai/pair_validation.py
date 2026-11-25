@@ -110,6 +110,7 @@ class PairValidation(BaseModel):
     errors: list[Issue] = Field(default_factory=list)
     warnings: list[Issue] = Field(default_factory=list)
     info: list[Issue] = Field(default_factory=list)
+    viewpoint: Optional[dict] = Field(default=None, description="SV-08 viewpoint mapping status of the pair")
     notice: str = ("Perceptual hashing detects copies of the same photograph; it cannot prove that two "
                    "photographs show the same physical area or the same view.")
 

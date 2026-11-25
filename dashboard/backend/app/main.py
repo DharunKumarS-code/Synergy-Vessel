@@ -26,8 +26,9 @@ from .imports.service import ImportFailure, ImportService
 from .infra import rate_limit
 from .infra.cache import TTLCache
 from .infra.circuit_breaker import CircuitBreaker
-from .routes import ai_analysis, auth, health, images, imports, inspections, reports, vessels
+from .routes import ai_analysis, auth, health, images, imports, inspections, reports, vessels, viewpoints
 from .services.inspection_store import InspectionStore
+from .services.viewpoints import ViewpointError, ViewpointService
 
 
 def build_provider(settings: Settings) -> ConditionProvider:
@@ -70,6 +71,9 @@ def create_app(settings: Optional[Settings] = None, condition_provider: Optional
             app.state.cache.clear()  # entries are tied to the old store anyway; this just frees memory
 
         app.state.imports = ImportService(settings, lambda: app.state.store, reload_store)
+        # SV-08: viewpoint mapping (separate metadata file); the AI compares only approved same-viewpoint pairs.
+        app.state.viewpoints = ViewpointService(settings.resolved_viewpoint_dir, lambda: app.state.store)
+        app.state.analysis.viewpoints = app.state.viewpoints if settings.resolved_viewpoint_ai_gate else None
         yield
 
     docs = {} if settings.api_docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}  # SV-02
@@ -89,7 +93,8 @@ def create_app(settings: Optional[Settings] = None, condition_provider: Optional
     # Added after the rate limiter, so CORS is the outer layer and 429 responses carry CORS headers too.
     app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
                        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["*"])
-    for r in (health.router, vessels.router, inspections.router, images.router, ai_analysis.router, reports.router, imports.router,
+    # viewpoints.router before inspections.router: /api/inspections/viewpoints must not reach /inspections/{record_id}.
+    for r in (health.router, vessels.router, viewpoints.router, viewpoints.admin_router, inspections.router, images.router, ai_analysis.router, reports.router, imports.router,
               imports.review_router, auth.router, auth.admin):
         app.include_router(r)
 
@@ -102,6 +107,10 @@ def create_app(settings: Optional[Settings] = None, condition_provider: Optional
     async def _account_error(_: Request, exc: AccountError) -> JSONResponse:
         headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
         return JSONResponse(status_code=exc.status, content={"detail": exc.message, "code": exc.code}, headers=headers)
+
+    @app.exception_handler(ViewpointError)
+    async def _viewpoint_error(_: Request, exc: ViewpointError) -> JSONResponse:
+        return JSONResponse(status_code=exc.status, content={"detail": exc.message, "code": exc.code})
 
     @app.exception_handler(ImportFailure)
     async def _import_error(_: Request, exc: ImportFailure) -> JSONResponse:

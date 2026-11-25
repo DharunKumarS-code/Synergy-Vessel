@@ -280,13 +280,86 @@ They are served read-only.
 
 ## 11. Image comparison
 
-1. Open **Image Comparison** and choose a location.
-2. Pick an **earlier** and a **later** inspection; the page shows the time between them.
-3. The two photographs appear side by side with zoom and their metadata.
-4. The dashboard checks whether the pair is suitable to compare (same location, different dates).
-   If it is not, the page explains why.
+Since SV-08 the comparison follows one **physical viewpoint** (one camera view) through the weeks,
+instead of picking "the first photo of each date" for a location.
 
-At least two inspection dates must exist for a location before it can be compared.
+1. Open **Image Comparison** and choose a location. Locations whose name contains "deck" are also
+   listed under **Main Deck Areas** at the top of the list. This is only a shortcut: each entry is
+   still its own Official Location and nothing is merged.
+2. Choose a **viewpoint** (for example "Top view main deck - view 2"). The list shows how much of
+   each viewpoint an administrator has approved.
+3. Choose the **earlier** and **later inspection week**. Both photographs always come from the
+   chosen viewpoint. If a week has several photographs of that viewpoint, step through them or use
+   "Choose from all photos of this viewpoint".
+4. The page then shows one of these states:
+   - **PHOTOGRAPH NOT AVAILABLE FOR THIS INSPECTION WEEK**: the viewpoint has no photograph for that
+     week. Choose another week.
+   - **NOT RETAKEN – SAME PHOTOGRAPH**: the later week reused the very same photograph file. There
+     is nothing to compare. Use **Show the next week with a new photograph** to jump ahead.
+   - **VIEWPOINT MAPPING REQUIRES ADMIN REVIEW**: an administrator has not yet confirmed that both
+     photographs show this viewpoint. The pair is not analysed. Administrators get a link to the
+     review (§11a).
+   - Otherwise the photographs are an approved pair and the inspection result / AI analysis
+     appears as described in §13.
+
+Links that contain only the `a` and `b` photograph IDs (from older bookmarks, Search or Reviews)
+still work: the page opens the viewpoint and weeks that hold those photographs.
+
+If no viewpoint mapping exists yet, or the location has no mapped viewpoints, the page shows a
+notice and falls back to the older location view. In that view the photographs may show different
+viewpoints and the AI never analyses them.
+
+### 11a. Viewpoint mapping (administrators)
+
+The mapping is stored in `dashboard\data\locations\viewpoints.json` (or the folder in
+`SYNERGY_VIEWPOINT_DIR`). It is additional metadata: historical workbooks, reports, registers and
+photographs are never changed, and every photograph keeps its record ID and original Official
+Location (Not Labelled photographs stay Not Labelled).
+
+**Generating the proposal (once).** Stop nothing; from `dashboard\backend`, with the same
+`SYNERGY_*` folder variables as the backend:
+
+```powershell
+.venv\Scripts\python -m app.cli generate-viewpoints --dry-run      # summary only, writes nothing
+.venv\Scripts\python -m app.cli generate-viewpoints                # writes viewpoints.json + viewpoints_report.md
+```
+
+The generator only reads the historical data. It:
+
+- detects the workbook layout eras (serial numbers were renumbered between Week 37 and Week 38);
+- uses a serial number only inside one layout era;
+- marks byte-identical files as repeated photographs, never as new inspections;
+- flags, but never merges, an identical file under different labels, a serial whose label changes,
+  and a change in the number of photographs of a location;
+- proposes links across a layout change by position only. These links are always **needs review**;
+- never matches by visual similarity or by similar names, and **approves nothing**.
+
+Read `viewpoints_report.md` (inventory, eras, flags and findings) before reviewing. The command
+refuses to overwrite a mapping that already contains administrator decisions.
+`--replace-proposals` replaces a mapping that holds proposals only. Generation is recorded in the
+audit log (`viewpoints_generated`). The running backend picks up the new file on the next request;
+no restart is needed.
+
+**Reviewing.** Open **Admin › Viewpoints**. Filter by location, week and status (start with
+**Needs review**). Each card shows the earlier and later photograph side by side with week, serial,
+Official Location, AI hint, the matching evidence and any flags. You can:
+
+- **Approve same viewpoint**: both photographs become *approved*. Only approved pairs can be
+  analysed by the AI.
+- **Reject earlier / later photograph**: the photograph leaves the viewpoint. It stays in the file
+  and the history, and can be reinstated.
+- **Correct…**: move the later photograph to another viewpoint, join another viewpoint into this
+  one, split the viewpoint from the later week, or rename it.
+- **Approve <viewpoint>** (bulk): approves the remaining unflagged proposals of a viewpoint. It is
+  refused while that viewpoint still has flagged photographs.
+
+Changing an approved photograph, moving and joining require a note. Every decision is checked
+against the mapping revision you were looking at. If someone else changed the mapping meanwhile,
+the decision is refused and the page reloads. Each decision is added to the mapping history
+(Decision history) and to the audit log (`viewpoint_decided`, failures as
+`viewpoint_decision_failed`).
+
+At least two inspection weeks with photographs must exist for a viewpoint before it can be compared.
 Running an AI assessment on a pair is described in §13.
 
 ---
@@ -328,7 +401,10 @@ Set these in the same PowerShell window, before the `uvicorn` command in §3. Th
 window is closed.
 
 **Using it** (signed in, reviewer or administrator):
-1. In **Image Comparison**, choose a valid pair and run the analysis.
+1. In **Image Comparison**, choose a valid pair and run the analysis. Since SV-08 a pair is eligible only when an
+   administrator has approved both photographs as the same viewpoint (§11a) and they are different files. The
+   server enforces this for every request (error `viewpoint_not_approved`), before anything is sent to the AI.
+   Automatic analysis stays **off** by default.
 2. The result has one of these classifications: **Deteriorated**, **Ameliorated**, **Stable** or **Needs review**.
 3. Every result starts as **Pending review**. A person sets it to **Approved**, **Rejected** or
    **Needs reassessment** on the **AI Condition Analysis** page. Treat AI output as a suggestion only.
@@ -524,7 +600,9 @@ failure. After each backup, also copy the whole `BKP-...` folder to another driv
   in the backup;
 - AI condition analyses;
 - imports;
-- accounts and the audit log.
+- accounts and the audit log;
+- the viewpoint mapping (`dashboard\data\locations`, section `app/locations`; SV-08). Backups made
+  before SV-08 simply have no mapping in them and still verify and restore.
 
 **What a backup does not contain:**
 - the application itself: `dashboard\` source code, `dashboard\backend\.venv`,
@@ -839,6 +917,7 @@ backup commands), otherwise they may use different folders.
 | `SYNERGY_ANALYSIS_DIR` | `dashboard\data\condition_analyses` | AI analysis store |
 | `SYNERGY_AUTH_DIR` | `dashboard\data\auth` | Accounts and audit log |
 | `SYNERGY_BACKUP_DIR` | `E:\Synergy Vessel Backups` | Backup location |
+| `SYNERGY_VIEWPOINT_DIR` | `dashboard\data\locations` | Viewpoint mapping (`viewpoints.json`, SV-08). There is deliberately no variable that lets the AI analyse unapproved pairs |
 | `SYNERGY_AI_PROVIDER` | `disabled` | `disabled`, `mock` or `groq` (any other value, including `gemini`, means disabled) |
 | `SYNERGY_AI_ALLOW_LIVE` | off | `1` permits live Groq requests (authorisation required) |
 | `SYNERGY_AI_MOCK_SCENARIO` | `stable` | Mock result: `stable`, `deteriorated`, `ameliorated`, `needs_review` |
