@@ -44,7 +44,7 @@ const expectResult = (text) => waitFor(() => expect(screen.getByLabelText('Inspe
 
 beforeEach(() => {
   vi.clearAllMocks()
-  resetAutoAnalysisRegistry()          // a freshly opened tab for every test (SV-06: automatic analysis OFF)
+  resetAutoAnalysisRegistry()          // a freshly opened tab for every test (automatic analysis ON by default)
   AUTO_ANALYSIS.delayMs = 20           // the 2 s debounce itself is tested in sv05AutoAnalysis.test.jsx
   sessionStorage.clear()
   api.getHealth.mockResolvedValue(fx.health)
@@ -370,26 +370,15 @@ describe('Automatic analysis (SV-05)', () => {
 
 })
 
-describe('Automatic analysis is OFF by default (SV-06)', () => {
+describe('Automatic analysis is ON by default', () => {
   const ENABLED = { available: true, message: 'Groq live analysis enabled.', provider: 'groq', model: 'm', simulated: false, live: true }
   const settle = () => new Promise((r) => setTimeout(r, 150))
   beforeEach(() => api.getAiStatus.mockResolvedValue(ENABLED))
 
-  it('a newly opened tab starts with the switch OFF and sends no AI request for an eligible pair', async () => {
+  it('a newly opened page starts with the switch ON and analyses an eligible pair automatically (once)', async () => {
     api.compareImages.mockResolvedValue({ analysis: analysis('DETERIORATED') })
     renderAt()
-    const sw = await screen.findByRole('switch', { name: 'Analyse automatically' })
-    expect(sw).not.toBeChecked()
-    expect(await screen.findByText('Automatic analysis is off. Turn it on to analyse these photos.')).toBeInTheDocument()
-    await settle()
-    expect(api.compareImages).not.toHaveBeenCalled()
-    await expectResult('🟡 NEEDS REVIEW')
-  })
-
-  it('turning the switch ON deliberately analyses the selected pair (once)', async () => {
-    api.compareImages.mockResolvedValue({ analysis: analysis('DETERIORATED') })
-    renderAt()
-    fireEvent.click(await screen.findByRole('switch', { name: 'Analyse automatically' }))
+    expect(await screen.findByRole('switch', { name: 'Analyse automatically' })).toBeChecked()
     await expectResult('🔴 DETERIORATED')
     await settle()
     expect(api.compareImages).toHaveBeenCalledTimes(1)
@@ -397,10 +386,26 @@ describe('Automatic analysis is OFF by default (SV-06)', () => {
     expect(api.reviewAnalysis).not.toHaveBeenCalled()
   })
 
-  it('the choice holds while moving around the app in this tab, and a new tab or refresh starts OFF again', async () => {
+  it('switching it OFF before the short delay ends sends no AI request for the selected pair', async () => {
+    AUTO_ANALYSIS.delayMs = 600                           // long enough to switch OFF before the automatic start
+    api.compareImages.mockResolvedValue({ analysis: analysis('DETERIORATED') })
+    renderAt()
+    const sw = await screen.findByRole('switch', { name: 'Analyse automatically' })
+    fireEvent.click(sw)
+    expect(sw).not.toBeChecked()
+    expect(await screen.findByText('Automatic analysis is off. Turn it on to analyse these photos.')).toBeInTheDocument()
+    await new Promise((r) => setTimeout(r, 900))
+    expect(api.compareImages).not.toHaveBeenCalled()
+    await expectResult('🟡 NEEDS REVIEW')
+  })
+
+  it('switched OFF during a comparison, it is ON again when Compare Photos is reopened (and in a new tab)', async () => {
+    AUTO_ANALYSIS.delayMs = 600
     api.compareImages.mockReturnValue(new Promise(() => {}))
     const first = renderAt()
-    fireEvent.click(await screen.findByRole('switch', { name: 'Analyse automatically' }))
+    const sw = await screen.findByRole('switch', { name: 'Analyse automatically' })
+    fireEvent.click(sw)
+    expect(sw).not.toBeChecked()
     first.unmount()                                       // left Compare Photos (same tab)
     renderAt()
     expect(await screen.findByRole('switch', { name: 'Analyse automatically' })).toBeChecked()
@@ -409,25 +414,21 @@ describe('Automatic analysis is OFF by default (SV-06)', () => {
     vi.clearAllMocks()
     api.getAiStatus.mockResolvedValue(ENABLED)
     renderAt()
-    expect(await screen.findByRole('switch', { name: 'Analyse automatically' })).not.toBeChecked()
-    await settle()
-    expect(api.compareImages).not.toHaveBeenCalled()
+    expect(await screen.findByRole('switch', { name: 'Analyse automatically' })).toBeChecked()
   })
 
-  it('the old SV-05 "on" setting left in the tab storage is ignored', async () => {
-    sessionStorage.setItem('sv_auto_analysis', 'on')
+  it('an old "off" setting left in the tab storage is ignored', async () => {
+    sessionStorage.setItem('sv_auto_analysis', 'off')
     renderAt()
-    expect(await screen.findByRole('switch', { name: 'Analyse automatically' })).not.toBeChecked()
-    await settle()
-    expect(api.compareImages).not.toHaveBeenCalled()
+    expect(await screen.findByRole('switch', { name: 'Analyse automatically' })).toBeChecked()
   })
 
-  it('switching it OFF again stops further automatic requests', async () => {
+  it('switching it OFF stops further automatic requests', async () => {
     api.compareImages.mockResolvedValue({ analysis: analysis('DETERIORATED') })
     renderAt()
     const sw = await screen.findByRole('switch', { name: 'Analyse automatically' })
-    fireEvent.click(sw)
-    await expectResult('🔴 DETERIORATED')
+    expect(sw).toBeChecked()
+    await expectResult('🔴 DETERIORATED')                 // analysed automatically
     fireEvent.click(sw)
     expect(sw).not.toBeChecked()
     fireEvent.click(screen.getByRole('button', { name: 'Next earlier photograph' }))

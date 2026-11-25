@@ -25,22 +25,23 @@ export const AUTO_ANALYSIS = { delayMs: AUTO_ANALYSIS_DELAY_MS }
 const registry = new Map() // `${userId}|${pairKey}` -> { status: 'running' | 'done' | 'failed', promise }
 
 /*
- * SV-06: the reviewer's "Analyse automatically" switch is OFF by default. The choice lives only in this module's
- * memory: it holds while the user moves around the app in this tab, but a new tab, a page refresh or a code reload
- * always starts OFF again, so automatic AI requests never begin without a deliberate choice. Nothing is persisted and
- * nothing is shared between tabs. (SV-05 kept the choice in sessionStorage with ON as the default; that key is no
- * longer read and is removed.)
+ * The reviewer's "Analyse automatically" switch is ON by default and is switched ON again every time the comparison
+ * page opens. The user may still turn it off while comparing; that choice lasts only until the page is opened again.
+ * Nothing is persisted and nothing is shared between tabs. Turning it on never bypasses the eligibility rules: the
+ * caller still requires both photos, reviewer/admin role, a passed pair check (no duplicates, approved viewpoint),
+ * acknowledged warnings, AI availability and no saved assessment. (The old sessionStorage key is removed.)
  */
-let autoAnalysisOn = false
+let autoAnalysisOn = true
 const listeners = new Set()
 try { sessionStorage.removeItem('sv_auto_analysis') } catch { /* storage unavailable */ }
 
-/** [on, setOn] for the "Analyse automatically" switch (OFF until the user turns it on in this tab). */
+/** [on, setOn] for the "Analyse automatically" switch (ON whenever the page using it opens). */
 export function useAutoAnalysisSetting() {
-  const [on, setOnState] = useState(autoAnalysisOn)
+  const [on, setOnState] = useState(true)
   useEffect(() => {
     listeners.add(setOnState)
-    setOnState(autoAnalysisOn)
+    autoAnalysisOn = true
+    listeners.forEach((l) => l(true))
     return () => { listeners.delete(setOnState) }
   }, [])
   const setOn = useCallback((value) => {
@@ -50,10 +51,10 @@ export function useAutoAnalysisSetting() {
   return [on, setOn]
 }
 
-/** Test helper: the state of a freshly opened tab (no attempts, switch OFF). */
+/** Test helper: the state of a freshly opened tab (no attempts, switch ON). */
 export const resetAutoAnalysisRegistry = () => {
   registry.clear()
-  autoAnalysisOn = false
+  autoAnalysisOn = true
 }
 
 /** Test helper: the user has already switched automatic analysis ON in this tab. */

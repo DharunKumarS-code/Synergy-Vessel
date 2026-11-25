@@ -88,21 +88,24 @@ describe('useAutoAnalysis', () => {
 })
 
 describe('useAutoAnalysisSetting (SV-06)', () => {
-  it('starts OFF, turns ON only when set, is shared by every Compare panel in the tab, and resets to OFF', () => {
+  it('starts ON, can be switched OFF and back ON, is shared by every Compare panel, and is ON again when reopened', () => {
     const a = renderHook(() => useAutoAnalysisSetting())
-    expect(a.result.current[0]).toBe(false)
-    const b = renderHook(() => useAutoAnalysisSetting())
-    act(() => a.result.current[1](true))
     expect(a.result.current[0]).toBe(true)
-    expect(b.result.current[0]).toBe(true)
+    const b = renderHook(() => useAutoAnalysisSetting())
+    act(() => a.result.current[1](false))                                             // manual switch OFF
+    expect(a.result.current[0]).toBe(false)
+    expect(b.result.current[0]).toBe(false)
+    act(() => b.result.current[1](true))                                              // and back ON
+    expect(a.result.current[0]).toBe(true)
+    act(() => a.result.current[1](false))
     a.unmount(); b.unmount()
-    expect(renderHook(() => useAutoAnalysisSetting()).result.current[0]).toBe(true)   // same tab, later visit
+    expect(renderHook(() => useAutoAnalysisSetting()).result.current[0]).toBe(true)   // page opened again
     resetAutoAnalysisRegistry()                                                       // a new tab / refresh
-    expect(renderHook(() => useAutoAnalysisSetting()).result.current[0]).toBe(false)
+    expect(renderHook(() => useAutoAnalysisSetting()).result.current[0]).toBe(true)
   })
 
-  it('never reads a stored value: nothing in sessionStorage can switch it on', () => {
-    sessionStorage.setItem('sv_auto_analysis', 'on')
-    expect(renderHook(() => useAutoAnalysisSetting()).result.current[0]).toBe(false)
+  it('never reads a stored value: nothing in sessionStorage can switch it off', () => {
+    sessionStorage.setItem('sv_auto_analysis', 'off')
+    expect(renderHook(() => useAutoAnalysisSetting()).result.current[0]).toBe(true)
   })
 })
