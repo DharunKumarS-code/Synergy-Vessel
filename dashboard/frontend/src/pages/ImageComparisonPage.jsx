@@ -728,21 +728,6 @@ function LinkMismatchNotice({ views, a, b, onOpen }) {
   )
 }
 
-/** Exact location chosen but no usable viewpoint mapping: photographs are shown by location, without AI. */
-function MappingNotice({ viewpoints }) {
-  if (viewpoints.loading) return null
-  const problem = viewpoints.error ? 'The viewpoint mapping could not be loaded.'
-    : viewpoints.data && !viewpoints.data.mapping?.available ? 'The viewpoint mapping is not available yet.'
-      : viewpoints.data && viewpoints.data.viewpoints?.length === 0 ? 'No viewpoints are mapped for this location.' : null
-  if (!problem) return null
-  return (
-    <p role="note" aria-label="Viewpoint mapping unavailable" className="flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-xs text-ink-muted">
-      <ShieldAlert size={14} className="mt-px shrink-0 text-amber-300" aria-hidden="true" />
-      <span>{problem} Photographs are shown by location only; they may show different viewpoints and are not analysed by the AI until an administrator approves the mapping.</span>
-    </p>
-  )
-}
-
 export default function ImageComparisonPage() {
   const [state, update] = useCompareState()
   const { selectedVessel, loading: vesselLoading, error: vesselError } = useVessel()
@@ -796,7 +781,6 @@ export default function ImageComparisonPage() {
     <div className="mx-auto max-w-6xl space-y-5">
       <SelectionCard location={location} exact={exact} onLocation={chooseLocation} />
       {!exact && !search.loading && !search.error && <MixedLocationsNote locations={locations} onPick={chooseExact} />}
-      {tryViewpoints && !viewpointMode && <MappingNotice viewpoints={viewpoints} />}
 
       {!location ? (
         <section className="card px-6 py-10 text-center">

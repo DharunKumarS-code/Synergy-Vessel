@@ -236,9 +236,11 @@ describe('Image Comparison by viewpoint', () => {
   it('falls back to the location view, without AI, when no mapping exists', async () => {
     api.getViewpoints.mockResolvedValue(NO_MAPPING)
     compareAt()
-    expect(await screen.findByRole('note', { name: 'Viewpoint mapping unavailable' })).toHaveTextContent('not analysed by the AI')
     await waitFor(() => expect(api.searchInspections).toHaveBeenCalled())
     expect(screen.queryByLabelText('Viewpoint')).not.toBeInTheDocument()
+    // No yellow "viewpoint mapping is not available yet" notice is shown above the page.
+    expect(screen.queryByRole('note', { name: 'Viewpoint mapping unavailable' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/viewpoint mapping is not available yet/)).not.toBeInTheDocument()
   })
 
   it('lists Not Labelled photographs separately under their original label and opens their viewpoints', async () => {
